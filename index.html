@@ -5,7 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Saif - Developer & AI Master</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- hCaptcha -->
     <script src="https://js.hcaptcha.com/1/api.js" async defer></script>
+    <!-- Cloudflare Turnstile -->
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
     <style>
         /* Base Styles */
         :root {
@@ -396,10 +399,47 @@
             resize: vertical;
         }
         
-        .h-captcha {
+        .captcha-selector {
+            display: flex;
+            justify-content: center;
+            margin: 20px 0;
+            background: #f0f2ff;
+            padding: 10px;
+            border-radius: 8px;
+        }
+        
+        .captcha-option {
+            padding: 8px 20px;
+            margin: 0 10px;
+            cursor: pointer;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: var(--transition);
+        }
+        
+        .captcha-option.active {
+            background: var(--primary);
+            color: white;
+        }
+        
+        .captcha-container {
             margin-top: 20px;
             display: flex;
             justify-content: center;
+        }
+        
+        .h-captcha-container, .cf-turnstile-container {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+        }
+        
+        .h-captcha-container {
+            display: block;
+        }
+        
+        .cf-turnstile-container {
+            display: none;
         }
         
         .form-message {
@@ -545,6 +585,17 @@
             }
             
             .btn {
+                width: 100%;
+                text-align: center;
+            }
+            
+            .captcha-selector {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .captcha-option {
+                margin: 5px 0;
                 width: 100%;
                 text-align: center;
             }
@@ -716,8 +767,25 @@
                             <textarea id="message" class="form-control" required></textarea>
                         </div>
                         
+                        <!-- Captcha Selector -->
+                        <div class="captcha-selector">
+                            <div class="captcha-option active" data-captcha="hcaptcha">hCaptcha</div>
+                            <div class="captcha-option" data-captcha="turnstile">Cloudflare Turnstile</div>
+                        </div>
+                        
                         <!-- hCaptcha Integration -->
-                        <div class="h-captcha" data-sitekey="3e56db86-b8ea-492a-a168-6e662ab62cc2"></div>
+                        <div class="captcha-container">
+                            <div class="h-captcha-container">
+                                <div class="h-captcha" data-sitekey="3e56db86-b8ea-492a-a168-6e662ab62cc2"></div>
+                            </div>
+                            <div class="cf-turnstile-container">
+                                <div class="cf-turnstile" 
+                                     data-sitekey="0x4AAAAAAB7v7VhyyAaMJrwt"
+                                     data-theme="light"
+                                     data-size="normal">
+                                </div>
+                            </div>
+                        </div>
                         
                         <button type="submit" class="btn">Send Message</button>
                         <div id="formMessage" class="form-message"></div>
@@ -771,18 +839,56 @@
             });
         });
         
-        // Form submission with hCaptcha
+        // Captcha Toggle
+        const captchaOptions = document.querySelectorAll('.captcha-option');
+        const hcaptchaContainer = document.querySelector('.h-captcha-container');
+        const turnstileContainer = document.querySelector('.cf-turnstile-container');
+        
+        captchaOptions.forEach(option => {
+            option.addEventListener('click', () => {
+                // Remove active class from all options
+                captchaOptions.forEach(opt => opt.classList.remove('active'));
+                // Add active class to clicked option
+                option.classList.add('active');
+                
+                // Show/hide captcha containers
+                if (option.dataset.captcha === 'hcaptcha') {
+                    hcaptchaContainer.style.display = 'block';
+                    turnstileContainer.style.display = 'none';
+                } else {
+                    hcaptchaContainer.style.display = 'none';
+                    turnstileContainer.style.display = 'block';
+                }
+            });
+        });
+        
+        // Form submission with captcha validation
         document.getElementById('contactForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             
             const formMessage = document.getElementById('formMessage');
-            const formData = new FormData(this);
-            const response = grecaptcha.getResponse();
+            const activeCaptcha = document.querySelector('.captcha-option.active').dataset.captcha;
+            let captchaResponse = '';
             
-            if (!response) {
-                formMessage.textContent = 'Please complete the hCaptcha verification.';
-                formMessage.className = 'form-message error';
-                return;
+            // Get captcha response based on active captcha
+            if (activeCaptcha === 'hcaptcha') {
+                captchaResponse = document.querySelector('.h-captcha-response').value;
+                if (!captchaResponse) {
+                    formMessage.textContent = 'Please complete the hCaptcha verification.';
+                    formMessage.className = 'form-message error';
+                    return;
+                }
+            } else {
+                // For Turnstile, we need to get the response from the widget
+                const turnstileWidget = document.querySelector('.cf-turnstile iframe');
+                if (!turnstileWidget) {
+                    formMessage.textContent = 'Please complete the Cloudflare Turnstile verification.';
+                    formMessage.className = 'form-message error';
+                    return;
+                }
+                // In a real implementation, you would get the token from the callback
+                // For this demo, we'll simulate a valid response
+                captchaResponse = 'turnstile_token';
             }
             
             // In a real implementation, you would send this to your server
@@ -794,7 +900,14 @@
                 formMessage.textContent = 'Message sent successfully! I\'ll get back to you soon.';
                 formMessage.className = 'form-message success';
                 this.reset();
-                grecaptcha.reset();
+                
+                // Reset captchas
+                if (activeCaptcha === 'hcaptcha') {
+                    hcaptha.reset();
+                } else {
+                    // Reset Turnstile (in real implementation)
+                    // turnstile.reset();
+                }
             } catch (error) {
                 formMessage.textContent = 'An error occurred. Please try again later.';
                 formMessage.className = 'form-message error';
@@ -812,6 +925,17 @@
                 header.style.boxShadow = '0 2px 10px rgba(0, 0, 0, 0.1)';
             }
         });
+        
+        // Initialize Turnstile with callback
+        window.onloadTurnstileCallback = function() {
+            turnstile.render('.cf-turnstile', {
+                sitekey: '0x4AAAAAAB7v7VhyyAaMJrwt',
+                callback: function(token) {
+                    // In a real implementation, you would handle the token here
+                    console.log('Turnstile token:', token);
+                },
+            });
+        };
     </script>
 </body>
 </html>
